@@ -1,0 +1,5 @@
+--require ./testSetup
+--timeout 5000
+--bail
+--recursive
+--check-leaks
