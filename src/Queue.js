@@ -35,7 +35,6 @@ export default class Queue extends EventEmitter {
 
     _.each(indexed, function(tasks) {
       let task = tasks[0];
-      // console.log(newQueue, task.concurrency, tasks.slice(0, task.concurrency));
       newQueue = newQueue.concat(tasks.slice(0, task.concurrency));
     });
 

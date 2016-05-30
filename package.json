@@ -1,20 +1,20 @@
 {
-  "name": "scheduler",
+  "name": "@CodeZavod/scheduler",
   "version": "0.0.0",
-  "private": true,
   "scripts": {
     "test": "NODE_ENV=testing mocha",
-    "coverage": "babel-node node_modules/.bin/babel-istanbul cover node_modules/mocha/bin/_mocha -- --reporter dot"
+    "coverage": "babel-node node_modules/.bin/babel-istanbul cover node_modules/mocha/bin/_mocha -- --reporter dot",
+    "prepublish": "gulp build"
   },
-  "description": "Scheduler backed by Postgresql.",
+  "description": "Scheduler backed by PostgreSQL.",
   "keywords": [
     "scheduler",
     "postgres",
     "queue"
   ],
-  "homepage": "https://github.com/imposibrus/scheduler",
+  "homepage": "https://github.com/CodeZavod/scheduler",
   "bugs": {
-    "url": "https://github.com/imposibrus/scheduler/issues"
+    "url": "https://github.com/CodeZavod/scheduler/issues"
   },
   "license": "MIT",
   "author": {
@@ -22,20 +22,18 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/imposibrus/scheduler.git"
+    "url": "https://github.com/CodeZavod/scheduler.git"
   },
   "engines": {
     "node": ">=0.10.25"
   },
   "files": [
-    "index.js",
-    "LICENSE",
-    "README.md"
+    "src/",
+    "dst/"
   ],
-  "main": "index.js",
+  "main": "dst/index.js",
   "dependencies": {
     "debug": "2.2.0",
-    "intel": "^1.0.2",
     "lodash": "^4.12.0",
     "pg": "4.5.5",
     "pg-hstore": "2.3.2",

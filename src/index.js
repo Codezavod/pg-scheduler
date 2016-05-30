@@ -242,15 +242,17 @@ class Scheduler extends EventEmitter {
                   task.failsCount = 0;
                 }
 
+                if(!task.interval) {
+                  // remove task created with `.once()`. lock will be removed with CASCADE
+                  return task.destroy().then(() => {
+                    this.emit(`task-${task.name}-complete`);
+                  }).catch(this.errorHandler.bind(this));
+                }
+
                 task.nextRunAt = new Date(Date.now() + task.interval);
 
                 task.save().then(() => {
                   debug('task saved. removing lock');
-                  if(!task.interval) {
-                    // remove task created with `.once()`. lock will be removed with CASCADE
-                    return task.destroy(/*{transaction: t}*/);
-                  }
-
                   return this.Lock.destroy({where: {id: createdLock.id}});
                 }).then(() => {
                   this.emit(`task-${task.name}-complete`);
