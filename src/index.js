@@ -3,6 +3,7 @@ import EventEmitter from 'events';
 import Sequelize from 'sequelize';
 import _ from 'lodash';
 import _debug from 'debug';
+import Promise from 'bluebird';
 import ProcessorsStorage from './ProcessorsStorage';
 import Queue from './Queue';
 
@@ -21,6 +22,7 @@ let defaultOptions = {
     }
   },
   pollingInterval: 5000, // milliseconds
+  locksCheckingInterval: 60000, // milliseconds
   workerName: process.pid
 };
 // how about concurrency per worker?
@@ -33,6 +35,7 @@ class Scheduler extends EventEmitter {
   queue = new Queue();
   static processorsStorage = new ProcessorsStorage();
   pollingTimeout = null;
+  locksCheckingTimeout = null;
 
   constructor(options = {}) {
     super();
@@ -48,6 +51,7 @@ class Scheduler extends EventEmitter {
       debug('sync completes successfully');
       this.processTasks();
       this.startPolling();
+      this.startLocksChecking();
     });
   }
 
@@ -194,6 +198,33 @@ class Scheduler extends EventEmitter {
     this.pollingTimeout = setTimeout(pollingFunction, this.options.pollingInterval);
   }
 
+  startLocksChecking() {
+    debug('starting locks checking');
+    let pollingFunction = () => {
+      // prevent concurrency queries
+      clearTimeout(this.locksCheckingTimeout);
+      let currDate = new Date();
+      this.Lock.findAll({ include: [ this.Task ] }).then((foundLocks) => {
+        return Promise.resolve(foundLocks).map((lock) => {
+          if(!lock.Task) {
+            return Promise.resolve();
+          }
+
+          if(currDate.getTime() - new Date(lock.updatedAt).getTime() > lock.Task.timeout) {
+            debug(`lock ${lock.id} for ${lock.Task.id} (${lock.Task.name}) expired. removing`);
+            return lock.destroy();
+          }
+
+          return Promise.resolve();
+        }, {concurrency: 1}).then(() => {
+          this.locksCheckingTimeout = setTimeout(pollingFunction, this.options.locksCheckingInterval);
+        });
+      }).catch(this.errorHandler.bind(this));
+    };
+
+    this.locksCheckingTimeout = setTimeout(pollingFunction, this.options.locksCheckingInterval);
+  }
+
   queueAddedHandler() {
     let task, noProcessors = [];
     // debug('queue added', this.queue);
@@ -220,6 +251,7 @@ class Scheduler extends EventEmitter {
       processor.lock();
 
       // TODO: lock expiration
+      // TODO: try lock table
 
       ((task, processor) => {
         return this.sequelize.transaction((t) => {
@@ -288,6 +320,7 @@ class Scheduler extends EventEmitter {
     debug('stop called');
     this.queue.removeListener('added', this.queueAddedHandler);
     clearTimeout(this.pollingTimeout);
+    clearTimeout(this.locksCheckingTimeout);
     this.sequelize.close();
   }
 }
