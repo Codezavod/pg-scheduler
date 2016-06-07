@@ -321,7 +321,9 @@ class Scheduler extends EventEmitter {
     this.queue.removeListener('added', this.queueAddedHandler);
     clearTimeout(this.pollingTimeout);
     clearTimeout(this.locksCheckingTimeout);
-    this.sequelize.close();
+    return this.Lock.destroy({where: {workerName: this.options.workerName.toString()}}).then(() => {
+      return this.sequelize.close();
+    });
   }
 }
 
