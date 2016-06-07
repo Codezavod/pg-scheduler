@@ -247,48 +247,50 @@ class Scheduler extends EventEmitter {
         continue;
       }
 
-      // lock processor in worker
-      processor.lock();
-
       // TODO: lock expiration
-      // TODO: try lock table
 
       ((task, processor) => {
         return this.sequelize.transaction((t) => {
-          return task.countLocks({transaction: t}).then((count) => {
-            // this is overall concurrency
-            debug(`${count} overall locks found for task ${task.name}`);
-            if(count >= task.concurrency) {
-              debug('overall concurrency reached');
-              this.queue.push(task);
-              return;
-            }
+          // TODO: get table name from model definition
+          return this.sequelize.query('LOCK TABLE "Locks" IN ACCESS EXCLUSIVE MODE', {transaction: t}).then(() => {
+            return task.countLocks({transaction: t}).then((count) => {
+              // this is overall concurrency
+              debug(`${count} overall locks found for task ${task.name}`);
+              if(count >= task.concurrency) {
+                debug('overall concurrency reached');
+                this.queue.push(task);
+                return;
+              }
 
-            return task.createLock({workerName: this.options.workerName}, {transaction: t}).then((createdLock) => {
-              debug(`lock ${createdLock.id} created for task ${task.name}. start processor`);
-              processor.start(task, (err) => {
-                if(err) {
-                  task.failsCount++;
-                  debug('processor completes with error', err);
-                } else {
-                  task.failsCount = 0;
-                }
+              // lock processor in worker
+              processor.lock();
 
-                if(!task.interval) {
-                  // remove task created with `.once()`. lock will be removed with CASCADE
-                  return task.destroy().then(() => {
+              return task.createLock({workerName: this.options.workerName}, {transaction: t}).then((createdLock) => {
+                debug(`lock ${createdLock.id} created for task ${task.name}. start processor`);
+                processor.start(task, (err) => {
+                  if(err) {
+                    task.failsCount++;
+                    debug('processor completes with error', err);
+                  } else {
+                    task.failsCount = 0;
+                  }
+
+                  if(!task.interval) {
+                    // remove task created with `.once()`. lock will be removed with CASCADE
+                    return task.destroy().then(() => {
+                      this.emit(`task-${task.name}-complete`);
+                    }).catch(this.errorHandler.bind(this));
+                  }
+
+                  task.nextRunAt = new Date(Date.now() + task.interval);
+
+                  task.save().then(() => {
+                    debug('task saved. removing lock');
+                    return this.Lock.destroy({where: {id: createdLock.id}});
+                  }).then(() => {
                     this.emit(`task-${task.name}-complete`);
                   }).catch(this.errorHandler.bind(this));
-                }
-
-                task.nextRunAt = new Date(Date.now() + task.interval);
-
-                task.save().then(() => {
-                  debug('task saved. removing lock');
-                  return this.Lock.destroy({where: {id: createdLock.id}});
-                }).then(() => {
-                  this.emit(`task-${task.name}-complete`);
-                }).catch(this.errorHandler.bind(this));
+                });
               });
             });
           });
