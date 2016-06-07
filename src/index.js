@@ -36,6 +36,8 @@ class Scheduler extends EventEmitter {
   static processorsStorage = new ProcessorsStorage();
   pollingTimeout = null;
   locksCheckingTimeout = null;
+  // count of processed tasks for each task (success or fail)
+  processedCount = {};
 
   constructor(options = {}) {
     super();
@@ -157,6 +159,11 @@ class Scheduler extends EventEmitter {
     });
   }
 
+  get totalProcessedCount() {
+    return _(this.processedCount).values().sum();
+  }
+
+  // TODO: rewrite to instance method
   /**
    * Define processor for task.
    * @param {String} taskName
@@ -170,6 +177,29 @@ class Scheduler extends EventEmitter {
     debug(`adding ${taskName} to processors storage`);
     Scheduler.processorsStorage.add(taskName, processor);
   }
+
+  // TODO: rewrite to instance method
+  static unDefineAll() {
+    Scheduler.processorsStorage.disableAll();
+  }
+
+  unDefineAll = Scheduler.unDefineAll;
+
+  // TODO: rewrite to instance method
+  static waitUntilAllEnd() {
+    return new Promise((resolve) => {
+      let interval = setInterval(() => {
+        if(Scheduler.processorsStorage.runningCount() == 0) {
+          clearInterval(interval);
+          setImmediate(() => {
+            resolve();
+          });
+        }
+      }, 500);
+    });
+  }
+
+  waitUntilAllEnd = Scheduler.waitUntilAllEnd;
 
   startPolling() {
     debug('starting polling');
@@ -268,6 +298,11 @@ class Scheduler extends EventEmitter {
               return task.createLock({workerName: this.options.workerName}, {transaction: t}).then((createdLock) => {
                 debug(`lock ${createdLock.id} created for task ${task.name}. start processor`);
                 processor.start(task, (err) => {
+                  if(!this.processedCount[task.id]) {
+                    this.processedCount[task.id] = 0;
+                  }
+                  this.processedCount[task.id]++;
+
                   if(err) {
                     task.failsCount++;
                     debug('processor completes with error', err);

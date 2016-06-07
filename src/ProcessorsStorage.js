@@ -15,14 +15,14 @@ export default class ProcessorsStorage {
   add(taskName, processorFunc) {
     debug(`task ${taskName} added to ProcessorsStorage`);
     if(!this._processors[taskName]) {
-      this._processors[taskName] = {currentIndex: -1, processors: []};
+      this._processors[taskName] = {currentIndex: -1, processors: [], active: true};
     }
 
     this._processors[taskName].processors.push(new Processor(processorFunc));
   }
 
   get(taskName) {
-    let processorsForTask = this._processors[taskName] ? this._processors[taskName].processors : null;
+    let processorsForTask = this._processors[taskName] && this._processors[taskName].active ? this._processors[taskName].processors : null;
     if(!processorsForTask || !processorsForTask.length) {
       debug(`no processors for task ${taskName} found`);
       return null;
@@ -42,13 +42,27 @@ export default class ProcessorsStorage {
     }
   }
 
-  runningCount(taskName) {
-    let processorsForTask = this._processors[taskName] ? this._processors[taskName].processors : null;
+  runningCount(taskName = null) {
+    let processorsForTask = [];
+    if(taskName) {
+      processorsForTask = this._processors[taskName] ? this._processors[taskName].processors : null;
+    } else {
+      _.each(this._processors, (taskProcessor) => {
+        processorsForTask = processorsForTask.concat(taskProcessor.processors || []);
+      });
+    }
+
     if(!processorsForTask || !processorsForTask.length) {
       return 0;
     }
 
     return _(processorsForTask).filter('running').value().length;
+  }
+  
+  disableAll() {
+    _.each(this._processors, (taskProcessor) => {
+      taskProcessor.active = false;
+    });
   }
 }
 
