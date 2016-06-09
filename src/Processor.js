@@ -14,6 +14,7 @@ export default class Processor {
     // TODO: `.touch` method for reset `Lock`
 
     let timeout = setTimeout(() => {
+      console.error(`processor end with timeout (${task.timeout / 1000}sec) for task`, task.toJSON());
       this.unlock();
       done(new Error(`timeout ${task.timeout / 1000}sec reached.`));
     }, task.timeout);

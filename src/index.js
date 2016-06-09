@@ -23,7 +23,8 @@ let defaultOptions = {
   },
   pollingInterval: 5000, // milliseconds
   locksCheckingInterval: 60000, // milliseconds
-  workerName: process.pid
+  workerName: process.pid,
+  pollingWhereClause: {}
 };
 // how about concurrency per worker?
 
@@ -202,17 +203,20 @@ class Scheduler extends EventEmitter {
   waitUntilAllEnd = Scheduler.waitUntilAllEnd;
 
   startPolling() {
-    debug('starting polling');
     let pollingFunction = () => {
       // prevent concurrency queries
+      let currDate = new Date(),
+          defaultWhere = {
+            nextRunAt: {$lte: currDate},
+            startAt: {$or: {$lte: currDate, $eq: null}},
+            endAt: {$or: {$gte: currDate, $eq: null}},
+            name: {$in: Object.keys(Scheduler.processorsStorage.processors)}
+          },
+          where = _.defaultsDeep({}, this.options.pollingWhereClause, defaultWhere);
+
       clearTimeout(this.pollingTimeout);
-      let currDate = new Date();
       this.Task.findAll({
-        where: {
-          nextRunAt: {$lte: currDate},
-          startAt: {$or: {$lte: currDate, $eq: null}},
-          endAt: {$or: {$gte: currDate, $eq: null}}
-        },
+        where: where,
         order: [['priority', 'ASC']],
         include: [ this.Lock ]
       }).then((foundTasks) => {
@@ -225,6 +229,7 @@ class Scheduler extends EventEmitter {
       }).catch(this.errorHandler.bind(this));
     };
 
+    debug('starting polling');
     this.pollingTimeout = setTimeout(pollingFunction, this.options.pollingInterval);
   }
 
@@ -304,8 +309,8 @@ class Scheduler extends EventEmitter {
                   this.processedCount[task.id]++;
 
                   if(err) {
+                    console.error('processor completes with error', err);
                     task.failsCount++;
-                    debug('processor completes with error', err);
                   } else {
                     task.failsCount = 0;
                   }

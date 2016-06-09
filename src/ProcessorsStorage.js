@@ -64,5 +64,9 @@ export default class ProcessorsStorage {
       taskProcessor.active = false;
     });
   }
+
+  get processors() {
+    return this._processors;
+  }
 }
 
