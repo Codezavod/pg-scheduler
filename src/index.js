@@ -34,7 +34,7 @@ class Scheduler extends EventEmitter {
   Task = null;
   Lock = null;
   queue = new Queue();
-  static processorsStorage = new ProcessorsStorage();
+  processorsStorage = new ProcessorsStorage();
   pollingTimeout = null;
   locksCheckingTimeout = null;
   // count of processed tasks for each task (success or fail)
@@ -164,33 +164,29 @@ class Scheduler extends EventEmitter {
     return _(this.processedCount).values().sum();
   }
 
-  // TODO: rewrite to instance method
   /**
    * Define processor for task.
    * @param {String} taskName
    * @param {Function} processor
    */
-  static process(taskName, processor) {
+  process(taskName, processor) {
     if(!taskName || !processor) {
       throw new Error('`taskName` and `processor` arguments are required');
     }
 
     debug(`adding ${taskName} to processors storage`);
-    Scheduler.processorsStorage.add(taskName, processor);
+    this.processorsStorage.add(taskName, processor);
+  }
+
+  unDefineAll() {
+    this.processorsStorage.disableAll();
   }
 
   // TODO: rewrite to instance method
-  static unDefineAll() {
-    Scheduler.processorsStorage.disableAll();
-  }
-
-  unDefineAll = Scheduler.unDefineAll;
-
-  // TODO: rewrite to instance method
-  static waitUntilAllEnd() {
+  waitUntilAllEnd() {
     return new Promise((resolve) => {
       let interval = setInterval(() => {
-        if(Scheduler.processorsStorage.runningCount() == 0) {
+        if(this.processorsStorage.runningCount() == 0) {
           clearInterval(interval);
           setImmediate(() => {
             resolve();
@@ -200,8 +196,6 @@ class Scheduler extends EventEmitter {
     });
   }
 
-  waitUntilAllEnd = Scheduler.waitUntilAllEnd;
-
   startPolling() {
     let pollingFunction = () => {
       // prevent concurrency queries
@@ -210,7 +204,7 @@ class Scheduler extends EventEmitter {
             nextRunAt: {$lte: currDate},
             startAt: {$or: {$lte: currDate, $eq: null}},
             endAt: {$or: {$gte: currDate, $eq: null}},
-            name: {$in: Object.keys(Scheduler.processorsStorage.processors)}
+            name: {$in: Object.keys(this.processorsStorage.processors)}
           },
           where = _.defaultsDeep({}, this.options.pollingWhereClause, defaultWhere);
 
@@ -264,7 +258,7 @@ class Scheduler extends EventEmitter {
     let task, noProcessors = [];
     // debug('queue added', this.queue);
     while(task = this.queue.shift()) {
-      let taskRunningCount = Scheduler.processorsStorage.runningCount(task.name);
+      let taskRunningCount = this.processorsStorage.runningCount(task.name);
       // skip if concurrency limit reached
       // this is concurrency per-worker
       debug(`${taskRunningCount} worker locks found for task ${task.name}`);
@@ -274,7 +268,7 @@ class Scheduler extends EventEmitter {
         continue;
       }
 
-      let processor = Scheduler.processorsStorage.get(task.name);
+      let processor = this.processorsStorage.get(task.name);
       // skip if no free processors found
       if(!processor) {
         debug(`no processors for task "${task.name}"`);
