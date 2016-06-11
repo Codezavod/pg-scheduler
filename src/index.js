@@ -24,7 +24,8 @@ let defaultOptions = {
   pollingInterval: 5000, // milliseconds
   locksCheckingInterval: 60000, // milliseconds
   workerName: process.pid,
-  pollingWhereClause: {}
+  pollingWhereClause: {},
+  maxConcurrency: 20 // concurrency for current instance for ALL tasks
 };
 // how about concurrency per worker?
 
@@ -39,6 +40,7 @@ class Scheduler extends EventEmitter {
   locksCheckingTimeout = null;
   // count of processed tasks for each task (success or fail)
   processedCount = {};
+  stopping = false;
 
   constructor(options = {}) {
     super();
@@ -49,9 +51,9 @@ class Scheduler extends EventEmitter {
   }
 
   start() {
-    debug('start syncing');
+    debug(`${process.pid} start syncing`);
     return this.sequelize.sync().then(() => {
-      debug('sync completes successfully');
+      debug(`${process.pid} sync completes successfully`);
       this.processTasks();
       this.startPolling();
       this.startLocksChecking();
@@ -114,7 +116,7 @@ class Scheduler extends EventEmitter {
     this.Task.hasMany(this.Lock, {onDelete: 'CASCADE'});
     this.Lock.belongsTo(this.Task);
 
-    debug('models defined');
+    debug(`${process.pid} models defined`);
   }
 
   every(interval, taskName, data = {}, options = {}) {
@@ -174,7 +176,7 @@ class Scheduler extends EventEmitter {
       throw new Error('`taskName` and `processor` arguments are required');
     }
 
-    debug(`adding ${taskName} to processors storage`);
+    debug(`${process.pid} adding ${taskName} to processors storage`);
     this.processorsStorage.add(taskName, processor);
   }
 
@@ -182,7 +184,6 @@ class Scheduler extends EventEmitter {
     this.processorsStorage.disableAll();
   }
 
-  // TODO: rewrite to instance method
   waitUntilAllEnd() {
     return new Promise((resolve) => {
       let interval = setInterval(() => {
@@ -197,8 +198,16 @@ class Scheduler extends EventEmitter {
   }
 
   startPolling() {
+    let repeat = () => {
+      this.pollingTimeout = setTimeout(pollingFunction, this.options.pollingInterval);
+    };
     let pollingFunction = () => {
-      // prevent concurrency queries
+      let runningCount = this.processorsStorage.runningCount();
+      if(runningCount >= this.options.maxConcurrency) {
+        debug(`${process.pid} maxConcurrency (${this.options.maxConcurrency}) limit reached (${runningCount}). delay polling`);
+        return repeat();
+      }
+
       let currDate = new Date(),
           defaultWhere = {
             nextRunAt: {$lte: currDate},
@@ -208,62 +217,78 @@ class Scheduler extends EventEmitter {
           },
           where = _.defaultsDeep({}, this.options.pollingWhereClause, defaultWhere);
 
+      // prevent concurrency queries
       clearTimeout(this.pollingTimeout);
       this.Task.findAll({
         where: where,
-        order: [['priority', 'ASC']],
+        // order: [['priority', 'ASC']], // order will be in queue anyway
         include: [ this.Lock ]
       }).then((foundTasks) => {
+        if(this.stopping) {
+          return;
+        }
+
         foundTasks = _.reject(foundTasks, (task) => task.Locks.length >= task.concurrency);
-        debug(`found ${foundTasks.length} tasks`);
+        debug(`${process.pid} found ${foundTasks.length} tasks`);
 
         this.queue.add(foundTasks);
 
-        this.pollingTimeout = setTimeout(pollingFunction, this.options.pollingInterval);
+        repeat();
       }).catch(this.errorHandler.bind(this));
     };
 
-    debug('starting polling');
-    this.pollingTimeout = setTimeout(pollingFunction, this.options.pollingInterval);
+    debug(`${process.pid} starting polling`);
+    repeat();
   }
 
   startLocksChecking() {
-    debug('starting locks checking');
+    debug(`${process.pid} starting locks checking`);
+    let repeat = () => {
+      this.locksCheckingTimeout = setTimeout(pollingFunction, this.options.locksCheckingInterval);
+    };
     let pollingFunction = () => {
       // prevent concurrency queries
       clearTimeout(this.locksCheckingTimeout);
       let currDate = new Date();
       this.Lock.findAll({ include: [ this.Task ] }).then((foundLocks) => {
         return Promise.resolve(foundLocks).map((lock) => {
-          if(!lock.Task) {
+          if(!lock.Task || this.stopping) {
             return Promise.resolve();
           }
 
           if(currDate.getTime() - new Date(lock.updatedAt).getTime() > lock.Task.timeout) {
-            debug(`lock ${lock.id} for ${lock.Task.id} (${lock.Task.name}) expired. removing`);
+            debug(`${process.pid} lock ${lock.id} for ${lock.Task.id} (${lock.Task.name}) expired. removing`);
             return lock.destroy();
           }
 
           return Promise.resolve();
         }, {concurrency: 1}).then(() => {
-          this.locksCheckingTimeout = setTimeout(pollingFunction, this.options.locksCheckingInterval);
+          if(this.stopping) {
+            return;
+          }
+
+          repeat();
         });
       }).catch(this.errorHandler.bind(this));
     };
 
-    this.locksCheckingTimeout = setTimeout(pollingFunction, this.options.locksCheckingInterval);
+    repeat();
   }
 
   queueAddedHandler() {
     let task, noProcessors = [];
-    // debug('queue added', this.queue);
+    // debug(`{process.pid} queue added', this.queu`);
     while(task = this.queue.shift()) {
+      if(this.stopping) {
+        break;
+      }
+
       let taskRunningCount = this.processorsStorage.runningCount(task.name);
       // skip if concurrency limit reached
       // this is concurrency per-worker
-      debug(`${taskRunningCount} worker locks found for task ${task.name}`);
+      debug(`${process.pid} ${taskRunningCount} worker locks found for task ${task.name} (${task.id})`);
       if(taskRunningCount >= task.concurrency) {
-        debug('worker concurrency limit reached');
+        debug(`${process.pid} worker concurrency limit reached`);
         noProcessors.push(task);
         continue;
       }
@@ -271,7 +296,7 @@ class Scheduler extends EventEmitter {
       let processor = this.processorsStorage.get(task.name);
       // skip if no free processors found
       if(!processor) {
-        debug(`no processors for task "${task.name}"`);
+        debug(`${process.pid} no processors for task "${task.name} (${task.id})"`);
         noProcessors.push(task);
         continue;
       }
@@ -279,23 +304,46 @@ class Scheduler extends EventEmitter {
       // TODO: lock expiration
 
       ((task, processor) => {
-        return this.sequelize.transaction((t) => {
+        return this.sequelize.transaction({isolationLevel: Sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE}, (t) => {
+          if(this.stopping) {
+            return Promise.resolve();
+          }
+
           // TODO: get table name from model definition
-          return this.sequelize.query('LOCK TABLE "Locks" IN ACCESS EXCLUSIVE MODE', {transaction: t}).then(() => {
+          return this.sequelize.query('LOCK TABLE "Locks" IN ACCESS EXCLUSIVE MODE;', {transaction: t}).then(() => {
+            if(this.stopping) {
+              return Promise.resolve();
+            }
+
             return task.countLocks({transaction: t}).then((count) => {
+              if(this.stopping) {
+                return Promise.resolve();
+              }
+
               // this is overall concurrency
-              debug(`${count} overall locks found for task ${task.name}`);
+              debug(`${process.pid} ${count} overall locks found for task ${task.name} (${task.id})`);
               if(count >= task.concurrency) {
-                debug('overall concurrency reached');
+                debug(`${process.pid} overall concurrency reached`);
                 this.queue.push(task);
-                return;
+                return Promise.resolve();
+              }
+
+              if(processor.isLocked()) {
+                debug(`${process.pid} processor already locked`);
+                this.queue.push(task);
+                return Promise.resolve();
               }
 
               // lock processor in worker
               processor.lock();
 
               return task.createLock({workerName: this.options.workerName}, {transaction: t}).then((createdLock) => {
-                debug(`lock ${createdLock.id} created for task ${task.name}. start processor`);
+                if(this.stopping) {
+                  processor.unlock();
+                  return this.Lock.destroy({where: {id: createdLock.id}});
+                }
+
+                debug(`${process.pid} lock ${createdLock.id} created for task ${task.name} (${task.id}). start processor`);
                 processor.start(task, (err) => {
                   if(!this.processedCount[task.id]) {
                     this.processedCount[task.id] = 0;
@@ -319,7 +367,7 @@ class Scheduler extends EventEmitter {
                   task.nextRunAt = new Date(Date.now() + task.interval);
 
                   task.save().then(() => {
-                    debug('task saved. removing lock');
+                    debug(`${process.pid} task saved. removing lock`);
                     return this.Lock.destroy({where: {id: createdLock.id}});
                   }).then(() => {
                     this.emit(`task-${task.name}-complete`);
@@ -353,11 +401,12 @@ class Scheduler extends EventEmitter {
   }
 
   stop() {
-    debug('stop called');
+    debug(`${process.pid} stop called`);
+    this.stopping = true;
     this.queue.removeListener('added', this.queueAddedHandler);
     clearTimeout(this.pollingTimeout);
     clearTimeout(this.locksCheckingTimeout);
-    return this.Lock.destroy({where: {workerName: this.options.workerName.toString()}}).then(() => {
+    return this.Lock.destroy({where: {workerName: this.options.workerName.toString()}}).delay(1000).then(() => {
       return this.sequelize.close();
     });
   }

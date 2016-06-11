@@ -33,5 +33,9 @@ export default class Processor {
   unlock() {
     this.running = false;
   }
+
+  isLocked() {
+    return this.running;
+  }
 }
 
