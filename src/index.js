@@ -101,6 +101,39 @@ class Scheduler extends EventEmitter {
         type: Sequelize.INTEGER,
         defaultValue: 0
       }
+    }, {
+      instanceMethods: {
+        // bad, bad hack :(
+        checkEmitter: function() {
+          if(!this.emitter) {
+            this.emitter = new EventEmitter();
+          }
+        },
+        on: function(...args) {
+          this.checkEmitter();
+          this.emitter.on(...args);
+        },
+        removeListener: function(...args) {
+          this.checkEmitter();
+          this.emitter.removeListener(...args);
+        },
+        emit: function(...args) {
+          this.checkEmitter();
+          this.emitter.emit(...args);
+        },
+        touch: function() {
+          debug(`${process.pid} '.touch()' called for task ${this.name} (${this.id})`);
+          this.emit('touch');
+          return this.getLocks().then((foundLocks) => {
+            debug(`${process.pid} '.touch()' found ${foundLocks.length} locks for task ${this.name} (${this.id})`);
+            return Promise.resolve(foundLocks).map((Lock) => {
+              Lock.updatedAt = new Date();
+              Lock.changed('updatedAt', true);
+              return Lock.save();
+            });
+          });
+        }
+      }
     });
 
     this.Lock = this.sequelize.define('Lock', {
@@ -170,14 +203,15 @@ class Scheduler extends EventEmitter {
    * Define processor for task.
    * @param {String} taskName
    * @param {Function} processor
+   * @param {Object} [options]
    */
-  process(taskName, processor) {
+  process(taskName, processor, options = {}) {
     if(!taskName || !processor) {
       throw new Error('`taskName` and `processor` arguments are required');
     }
 
     debug(`${process.pid} adding ${taskName} to processors storage`);
-    this.processorsStorage.add(taskName, processor);
+    this.processorsStorage.add(taskName, processor, options);
   }
 
   unDefineAll() {
@@ -250,7 +284,7 @@ class Scheduler extends EventEmitter {
       // prevent concurrency queries
       clearTimeout(this.locksCheckingTimeout);
       let currDate = new Date();
-      this.Lock.findAll({ include: [ this.Task ] }).then((foundLocks) => {
+      this.Lock.findAll({ include: [ {model: this.Task, fields: ['id', 'name', 'timeout']} ] }).then((foundLocks) => {
         return Promise.resolve(foundLocks).map((lock) => {
           if(!lock.Task || this.stopping) {
             return Promise.resolve();
@@ -301,8 +335,6 @@ class Scheduler extends EventEmitter {
         continue;
       }
 
-      // TODO: lock expiration
-
       ((task, processor) => {
         return this.sequelize.transaction({isolationLevel: Sequelize.Transaction.ISOLATION_LEVELS.SERIALIZABLE}, (t) => {
           if(this.stopping) {
@@ -328,19 +360,16 @@ class Scheduler extends EventEmitter {
                 return Promise.resolve();
               }
 
-              if(processor.isLocked()) {
-                debug(`${process.pid} processor already locked`);
-                this.queue.push(task);
-                return Promise.resolve();
-              }
-
-              // lock processor in worker
-              processor.lock();
-
               return task.createLock({workerName: this.options.workerName}, {transaction: t}).then((createdLock) => {
+                if(processor.isLocked) {
+                  debug(`${process.pid} processor already locked`);
+                  this.queue.push(task);
+                  return this.Lock.destroy({where: {id: createdLock.id}, transaction: t});
+                }
+
                 if(this.stopping) {
                   processor.unlock();
-                  return this.Lock.destroy({where: {id: createdLock.id}});
+                  return this.Lock.destroy({where: {id: createdLock.id}, transaction: t});
                 }
 
                 debug(`${process.pid} lock ${createdLock.id} created for task ${task.name} (${task.id}). start processor`);

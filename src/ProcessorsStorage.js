@@ -12,13 +12,19 @@ export default class ProcessorsStorage {
 
   }
 
-  add(taskName, processorFunc) {
+  /**
+   * Adds processorFunc to storage
+   * @param {String} taskName
+   * @param {Function} processorFunc
+   * @param {Object} [options]
+   */
+  add(taskName, processorFunc, options) {
     debug(`task ${taskName} added to ProcessorsStorage`);
     if(!this._processors[taskName]) {
       this._processors[taskName] = {currentIndex: -1, processors: [], active: true};
     }
 
-    this._processors[taskName].processors.push(new Processor(processorFunc));
+    this._processors[taskName].processors.push(new Processor(processorFunc, options));
   }
 
   get(taskName) {
@@ -29,7 +35,7 @@ export default class ProcessorsStorage {
     }
 
     let nextIndex = this._processors[taskName].currentIndex + 1,
-        free = _(processorsForTask).reject('running').value();
+        free = _(processorsForTask).reject('isLocked').value();
 
     if(!free.length) {
       return null;
@@ -56,7 +62,7 @@ export default class ProcessorsStorage {
       return 0;
     }
 
-    return _(processorsForTask).filter('running').value().length;
+    return _(processorsForTask).filter('isLocked').map('runningCount').sum();
   }
   
   disableAll() {
