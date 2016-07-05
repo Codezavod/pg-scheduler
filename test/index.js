@@ -1,4 +1,5 @@
 
+import sinon from 'sinon';
 import Scheduler from '../src/index';
 
 function defer() {
@@ -19,12 +20,12 @@ describe('Scheduler', () => {
     Scheduler.should.be.a.Function();
   });
 
-  it('should have a `.process` static method', () => {
-    Scheduler.should.have.property('process').which.is.a.Function();
+  it('should have a `.calcNextRunAt` static method', () => {
+    Scheduler.should.have.property('calcNextRunAt').which.is.a.Function();
   });
 
-  it('should have a `.processorsStorage` static property', () => {
-    Scheduler.should.have.property('processorsStorage').which.is.a.Object();
+  it('should have a `.assertRunAtTime` static property', () => {
+    Scheduler.should.have.property('assertRunAtTime').which.is.a.Function();
   });
 });
 
@@ -43,6 +44,14 @@ describe('Instance', () => {
 
   it('should have a `.start` method', () => {
     instance.should.have.property('start').which.is.a.Function();
+  });
+
+  it('should have a `.start` method', () => {
+    instance.should.have.property('process').which.is.a.Function();
+  });
+
+  it('should have a `.start` method', () => {
+    instance.should.have.property('processorsStorage').which.is.a.Object();
   });
 
   it('should have a `.stop` method', () => {
@@ -64,7 +73,7 @@ describe('Processing', () => {
     instance = new Scheduler({pollingInterval: 500});
   });
   after(() => {
-    return instance.Task.destroy({where: {$or: [{name: 'task'}]}}).then(() => {
+    return instance.Task.destroy({where: {$or: [{name: 'task'}, {name: 'task4'}, {name: 'task5'}]}}).then(() => {
       instance.stop();
     });
   });
@@ -83,8 +92,7 @@ describe('Processing', () => {
     instance.on('task-task-complete', () => {
       done();
     });
-    Scheduler.process('task', (task, cb) => {
-      console.log('processing', task.get({plain: true}));
+    instance.process('task', (task, cb) => {
       task.should.have.properties(['data', 'name']);
       cb();
     });
@@ -95,7 +103,7 @@ describe('Processing', () => {
         promises = [defers[0].promise, defers[1].promise, defers[2].promise];
 
     for(let i = 0; i < 3; i++) {
-      Scheduler.process('task2', (task, cb) => {
+      instance.process('task2', (task, cb) => {
         // console.log(`processing-${i}`, task.get({plain: true}));
         task.should.have.properties(['data', 'name']);
         cb();
@@ -118,7 +126,7 @@ describe('Processing', () => {
     let timesProcessed = 0;
 
     for(let i = 0; i < 3; i++) {
-      Scheduler.process('task3', (task, cb) => {
+      instance.process('task3', (task, cb) => {
         timesProcessed++;
         // console.log('start processing task3 with processor', i);
         task.should.have.properties(['data', 'name']);
@@ -143,4 +151,27 @@ describe('Processing', () => {
       qwe: 'asd'
     }, {concurrency: 1});
   });
+
+  it('should throw on invalid `runAtTime` format', () => {
+    (function() {
+      instance.everyDayAt('2016-07-05', 'task4', {qwe: 'asd'});
+    }).should.throw('`runAtTime` should be in format: "HH:mm" or "HH:mm:ss"');
+  });
+
+  it('should calculate `nextRunAt` with `runAtTime`', () => {
+    let clock = sinon.useFakeTimers(new Date('2016-07-05 22:02:50').getTime());
+    return instance.everyDayAt('00:00', 'task4', {qwe: 'asd'}).then((createdTask) => {
+      createdTask.nextRunAt.getTime().should.be.equal(new Date('2016-07-06 00:00:00').getTime());
+      clock.restore();
+    });
+  });
+
+  it('should calculate `nextRunAt` with `interval`', () => {
+    let clock = sinon.useFakeTimers(new Date('2016-07-05 22:02:50').getTime());
+    return instance.every((1000 * 60 * 5), 'task5', {qwe: 'asd'}).then((createdTask) => {
+      createdTask.nextRunAt.getTime().should.be.equal(new Date('2016-07-05 22:07:50').getTime());
+      clock.restore();
+    });
+  });
+
 });

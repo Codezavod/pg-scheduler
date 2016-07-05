@@ -100,6 +100,9 @@ class Scheduler extends EventEmitter {
       failsCount: {
         type: Sequelize.INTEGER,
         defaultValue: 0
+      },
+      runAtTime: {
+        type: Sequelize.TIME
       }
     }, {
       instanceMethods: {
@@ -154,7 +157,7 @@ class Scheduler extends EventEmitter {
 
   every(interval, taskName, data = {}, options = {}) {
     // TODO: human-readable format
-    let nextRunAt = new Date(Date.now() + interval),
+    let nextRunAt = Scheduler.calcNextRunAt(interval),
         {startAt, endAt, concurrency, priority, timeout, now} = options;
 
     if(now) {
@@ -165,6 +168,29 @@ class Scheduler extends EventEmitter {
       name: taskName,
       data,
       interval,
+      nextRunAt,
+      startAt,
+      endAt,
+      concurrency,
+      priority,
+      timeout
+    });
+  }
+
+  everyDayAt(runAtTime, taskName, data = {}, options = {}) {
+    Scheduler.assertRunAtTime(runAtTime);
+
+    let nextRunAt = Scheduler.calcNextRunAt(null, runAtTime),
+        {startAt, endAt, concurrency, priority, timeout, now} = options;
+
+    if(now) {
+      nextRunAt = new Date();
+    }
+
+    return this.Task.create({
+      name: taskName,
+      data,
+      runAtTime,
       nextRunAt,
       startAt,
       endAt,
@@ -197,6 +223,22 @@ class Scheduler extends EventEmitter {
 
   get totalProcessedCount() {
     return _(this.processedCount).values().sum();
+  }
+
+  static calcNextRunAt(interval, runAtTime) {
+    let now = new Date();
+    if(interval && !runAtTime) {
+      return new Date(now.getTime() + interval);
+    } else if(!interval && runAtTime) {
+      let nextDate = new Date(now.getTime() + (1000 * 60 * 60 * 24)),
+          timeArr = runAtTime.split(':');
+
+      nextDate.setHours(~~timeArr[0], ~~timeArr[1], ~~timeArr[2]);
+
+      return nextDate;
+    } else {
+      throw new Error('Not implemented. use or only `interval` or only `runAtTime`');
+    }
   }
 
   /**
@@ -393,7 +435,7 @@ class Scheduler extends EventEmitter {
                     }).catch(this.errorHandler.bind(this));
                   }
 
-                  task.nextRunAt = new Date(Date.now() + task.interval);
+                  task.nextRunAt = Scheduler.calcNextRunAt(task.interval, task.runAtTime);
 
                   task.save().then(() => {
                     debug(`${process.pid} task saved. removing lock`);
@@ -438,6 +480,12 @@ class Scheduler extends EventEmitter {
     return this.Lock.destroy({where: {workerName: this.options.workerName.toString()}}).delay(1000).then(() => {
       return this.sequelize.close();
     });
+  }
+
+  static assertRunAtTime(runAtTime) {
+    if(typeof runAtTime != 'string' || runAtTime.indexOf(':') == -1 || runAtTime.split(':').length < 2) {
+      throw new Error('`runAtTime` should be in format: "HH:mm" or "HH:mm:ss"');
+    }
   }
 }
 
