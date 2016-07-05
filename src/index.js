@@ -428,7 +428,7 @@ class Scheduler extends EventEmitter {
                     task.failsCount = 0;
                   }
 
-                  if(!task.interval) {
+                  if(!task.interval && !task.runAtTime) {
                     // remove task created with `.once()`. lock will be removed with CASCADE
                     return task.destroy().then(() => {
                       this.emit(`task-${task.name}-complete`);
