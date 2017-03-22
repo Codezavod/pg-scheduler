@@ -48,11 +48,12 @@ class Scheduler extends EventEmitter {
     let dbOpts = this.options.db;
     this.sequelize = new Sequelize(dbOpts.database, dbOpts.username, dbOpts.password, dbOpts.options);
     this.defineModels();
+    this.syncing = this.sequelize.sync();
+    debug(`${process.pid} start syncing`);
   }
 
   start() {
-    debug(`${process.pid} start syncing`);
-    return this.sequelize.sync().then(() => {
+    return this.syncing.then(() => {
       debug(`${process.pid} sync completes successfully`);
       this.processTasks();
       this.startPolling();

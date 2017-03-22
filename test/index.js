@@ -35,6 +35,7 @@ describe('Instance', () => {
 
   before(() => {
     instance = new Scheduler();
+    return instance.syncing;
   });
   after(() => {
     return startPromise.then(() => {
@@ -71,6 +72,7 @@ describe('Processing', () => {
   let instance;
   before(() => {
     instance = new Scheduler({pollingInterval: 500});
+    return instance.syncing;
   });
   after(() => {
     return instance.Task.destroy({where: {$or: [{name: 'task'}, {name: 'task4'}, {name: 'task5'}]}}).then(() => {

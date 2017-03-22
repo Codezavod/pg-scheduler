@@ -1,9 +1,9 @@
 {
   "name": "pg-scheduler",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "scripts": {
     "test": "NODE_ENV=testing mocha",
-    "coverage": "babel-node node_modules/.bin/babel-istanbul cover node_modules/mocha/bin/_mocha -- --reporter dot",
+    "coverage": "babel-node $(which babel-istanbul) cover node_modules/mocha/bin/_mocha -- --reporter dot",
     "prepublish": "gulp build"
   },
   "description": "Scheduler backed by PostgreSQL.",
@@ -33,21 +33,20 @@
   ],
   "main": "dst/index.js",
   "dependencies": {
-    "debug": "2.2.0",
+    "debug": "2.6.3",
     "lodash": "^4.12.0",
-    "pg": "4.5.5",
+    "pg": "6.1.5",
     "pg-hstore": "2.3.2",
     "pg-native": "1.10.0",
-    "sequelize": "3.23.2"
+    "sequelize": "3.30.2"
   },
   "devDependencies": {
-    "babel-istanbul": "github:imposibrus/babel-istanbul",
-    "babel-preset-es2015": "6.9.0",
-    "babel-preset-stage-0": "6.5.0",
+    "babel-preset-es2015": "6.24.0",
+    "babel-preset-stage-0": "6.22.0",
     "gulp": "^3.9.0",
     "gulp-babel": "6.1.2",
-    "mocha": "2.4.5",
-    "should": "^8.3.2",
-    "sinon": "1.17.4"
+    "mocha": "3.2.0",
+    "should": "^11.2.1",
+    "sinon": "2.1.0"
   }
 }
