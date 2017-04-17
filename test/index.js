@@ -1,13 +1,15 @@
 
-import sinon from 'sinon';
-import Scheduler from '../src/index';
+const sinon = require('sinon'),
+    Scheduler = require('../src/index');
 
 function defer() {
-  var resolve, reject;
-  var promise = new Promise(function() {
-    resolve = arguments[0];
-    reject = arguments[1];
-  });
+  let resolve,
+      reject,
+      promise = new Promise(function() {
+        resolve = arguments[0];
+        reject = arguments[1];
+      });
+
   return {
     resolve: resolve,
     reject: reject,

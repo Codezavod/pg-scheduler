@@ -1,23 +1,23 @@
 
-import EventEmitter from 'events';
-import _ from 'lodash';
-import _debug from 'debug';
+const EventEmitter = require('events'),
+    _ = require('lodash'),
+    debug = require('debug')('scheduler:queue');
 
-const debug = _debug('scheduler:queue');
-
-export default class Queue extends EventEmitter {
+module.exports = class Queue extends EventEmitter {
   _queue = [];
   order = [];
   iterates = [];
 
   constructor(iterates = ['priority'], order = ['asc']) {
     super();
+
     this.iterates = iterates;
     this.order = order;
   }
 
   add(tasks) {
     debug(`tasks added to queue`);
+
     this.push(tasks);
     this.emit('added');
   }
@@ -44,9 +44,10 @@ export default class Queue extends EventEmitter {
   shift() {
     if(!this._queue.length) {
       this.emit('empty');
+
       return null;
     }
+
     return this._queue.shift();
   }
-}
-
+};

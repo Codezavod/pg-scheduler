@@ -1,7 +1,7 @@
 
-import _ from 'lodash';
+const _ = require('lodash');
 
-export default class Processor {
+module.exports = class Processor {
   processorFunc;
   runningCount = 0;
   options = {
@@ -48,5 +48,5 @@ export default class Processor {
   get isLocked() {
     return this.runningCount >= this.options.concurrency;
   }
-}
+};
 
