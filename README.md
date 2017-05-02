@@ -1,1 +1,1 @@
-# scheduler
+# pg-scheduler

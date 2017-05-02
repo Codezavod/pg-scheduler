@@ -1,7 +1,7 @@
 
 const EventEmitter = require('events'),
     _ = require('lodash'),
-    debug = require('debug')('scheduler:queue');
+    debug = require('debug')('pg-scheduler:queue');
 
 class Queue extends EventEmitter {
     _queue = [];

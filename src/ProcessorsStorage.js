@@ -1,7 +1,7 @@
 
 const _ = require('lodash'),
     Processor = require('./Processor'),
-    debug = require('debug')('scheduler:processors:storage');
+    debug = require('debug')('pg-scheduler:processors:storage');
 
 class ProcessorsStorage {
     _processors = {};

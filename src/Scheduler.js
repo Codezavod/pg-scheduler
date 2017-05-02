@@ -2,7 +2,7 @@
 const EventEmitter = require('events'),
     Sequelize = require('sequelize'),
     _ = require('lodash'),
-    debug = require('debug')('scheduler'),
+    debug = require('debug')('pg-scheduler'),
     Promise = require('bluebird'),
     ProcessorsStorage = require('./ProcessorsStorage'),
     Queue = require('./Queue'),
@@ -11,9 +11,9 @@ const EventEmitter = require('events'),
 
 const defaultOptions = {
     db: {
-        database: 'scheduler',
-        username: 'scheduler',
-        password: 'scheduler',
+        database: 'pg-scheduler',
+        username: 'pg-scheduler',
+        password: 'pg-scheduler',
         options: {
             host: 'localhost',
             dialect: 'postgres',
