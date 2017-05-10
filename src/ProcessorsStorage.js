@@ -24,29 +24,39 @@ class ProcessorsStorage {
         this._processors[taskName].processors.push(new Processor(processorFunc, options));
     }
 
-    get(taskName) {
-        let processorsForTask = this._processors[taskName] && this._processors[taskName].active ? this._processors[taskName].processors : null;
+    get(task) {
+        const taskName = task.name,
+            processor = this._processors[taskName],
+            processorsForTask = processor && processor.active ? processor.processors : [];
 
-        if (!processorsForTask || !processorsForTask.length) {
+        if (!processorsForTask.length) {
             debug(`no processors for task ${taskName} found`);
 
             return null;
         }
 
-        let nextIndex = this._processors[taskName].currentIndex + 1,
+        const nextIndex = processor.currentIndex + 1,
             free = _(processorsForTask).reject('isLocked').value();
+
+        let resultProcessor;
 
         if (!free.length) {
             return null;
         } else if (nextIndex >= free.length) {
-            this._processors[taskName].currentIndex = 0;
+            processor.currentIndex = 0;
 
-            return free[0];
+            resultProcessor = free[0];
         } else {
-            this._processors[taskName].currentIndex = nextIndex;
+            processor.currentIndex = nextIndex;
 
-            return free[nextIndex];
+            resultProcessor = free[nextIndex];
         }
+
+        if (typeof resultProcessor.matchTask === 'function' && !resultProcessor.matchTask(task)) {
+            return null;
+        }
+
+        return resultProcessor;
     }
 
     runningCount(taskName = null) {

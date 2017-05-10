@@ -2,7 +2,7 @@
 const EventEmitter = require('events'),
     Sequelize = require('sequelize'),
     Promise = require('bluebird'),
-    debug = require('debug')('pg-scheduler');
+    debug = require('debug')('pg-scheduler:models');
 
 class Models {
     constructor(sequelize) {

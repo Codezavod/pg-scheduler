@@ -45,9 +45,14 @@ class Scheduler extends EventEmitter {
 
         this.options = _.defaultsDeep({}, options, defaultOptions);
 
-        let dbOpts = this.options.db;
+        if (this.options.client instanceof Sequelize) {
+            this.sequelize = this.options.client;
+        } else {
+            let dbOpts = this.options.db;
 
-        this.sequelize = new Sequelize(dbOpts.database, dbOpts.username, dbOpts.password, dbOpts.options);
+            this.sequelize = new Sequelize(dbOpts.database, dbOpts.username, dbOpts.password, dbOpts.options);
+        }
+
         this.models = new Models(this.sequelize);
         this.syncing = this.sequelize.sync();
         debug(`${process.pid} start syncing`);
@@ -55,6 +60,10 @@ class Scheduler extends EventEmitter {
 
     start() {
         return this.syncing.then(() => {
+            if (this.stopping) {
+                return;
+            }
+
             debug(`${process.pid} sync completes successfully`);
             this.processTasks();
             this.startPolling();
@@ -171,13 +180,6 @@ class Scheduler extends EventEmitter {
             // prevent concurrency queries
             clearTimeout(this.pollingTimeout);
 
-            const runningCount = this.processorsStorage.runningCount();
-
-            if (runningCount >= this.options.maxConcurrency) {
-                debug(`${process.pid} maxConcurrency (${this.options.maxConcurrency}) limit reached (${runningCount}). delay polling`);
-                return repeat();
-            }
-
             const currDate = new Date(),
                 defaultWhere = {
                     nextRunAt: {$lte: currDate},
@@ -256,7 +258,16 @@ class Scheduler extends EventEmitter {
                 return;
             }
 
-            let taskRunningCount = this.processorsStorage.runningCount(task.name);
+            let taskRunningCount = this.processorsStorage.runningCount(task.name),
+                workerRunningCount = this.processorsStorage.runningCount();
+
+            if (workerRunningCount >= this.options.maxConcurrency) {
+                debug(`${process.pid} maxConcurrency (${this.options.maxConcurrency}) limit reached (${workerRunningCount})`);
+                noProcessors.push(task);
+                recursive(this.queue.shift());
+
+                return;
+            }
 
             // skip if concurrency limit reached
             // this is concurrency per-worker
@@ -270,7 +281,7 @@ class Scheduler extends EventEmitter {
                 return;
             }
 
-            const processor = this.processorsStorage.get(task.name);
+            const processor = this.processorsStorage.get(task);
             // skip if no free processors found
             if (!processor) {
                 debug(`${process.pid} no processors for task "${task.name} (${task.id})"`);

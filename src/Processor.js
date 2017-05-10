@@ -1,16 +1,20 @@
 
-const _ = require('lodash');
+const _ = require('lodash'),
+    defaultOptions = {
+        concurrency: 1,
+    };
 
 class Processor {
     processorFunc;
     runningCount = 0;
-    options = {
-        concurrency: 1
-    };
 
     constructor(processorFunc, options) {
         this.processorFunc = processorFunc;
-        this.options = options;
+        this.options = _.defaultsDeep({}, options, defaultOptions);
+
+        if (typeof this.options.matchTask === 'function') {
+            this.matchTask = this.options.matchTask;
+        }
     }
 
     start(task, done) {
