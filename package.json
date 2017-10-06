@@ -1,6 +1,6 @@
 {
   "name": "pg-scheduler",
-  "version": "3.0.0-beta4",
+  "version": "3.0.0-beta5",
   "scripts": {
     "test": "NODE_ENV=testing mocha",
     "coverage": "babel-node $(which babel-istanbul) cover node_modules/mocha/bin/_mocha -- --reporter dot",
@@ -25,11 +25,12 @@
     "url": "https://github.com/CodeZavod/pg-scheduler.git"
   },
   "engines": {
-    "node": ">=0.10.25"
+    "node": ">=6.0.0"
   },
   "files": [
     "src/",
-    "dst/"
+    "dst/",
+    "index.d.ts"
   ],
   "main": "dst/Scheduler.js",
   "typings": "index.d.ts",
