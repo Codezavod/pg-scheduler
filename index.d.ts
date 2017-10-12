@@ -78,6 +78,7 @@ declare namespace Scheduler {
     }
 
     interface TaskAttribute {
+        id: number;
         name: string;
         data?: any;
         interval?: string;
@@ -89,15 +90,19 @@ declare namespace Scheduler {
         timeout?: number;
         failsCount?: number;
         runAtTime?: string;
+        Locks?: Lock[];
     }
 
-    interface Task extends Model<TaskInstance, TaskAttribute> {}
+    interface Task extends Model<TaskInstance, TaskAttribute>, TaskAttribute {}
 
     interface LockInstance extends Instance<LockAttribute> {}
 
     interface LockAttribute {
+        id: number;
         workerName: string;
+        TaskId: number;
+        Task?: Task;
     }
 
-    interface Lock extends Model<LockInstance, LockAttribute> {}
+    interface Lock extends Model<LockInstance, LockAttribute>, LockAttribute {}
 }
