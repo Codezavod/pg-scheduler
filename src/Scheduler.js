@@ -54,7 +54,7 @@ class Scheduler extends EventEmitter {
         }
 
         this.models = new Models(this.sequelize);
-        this.syncing = this.sequelize.sync();
+        this.syncing = this.models.sync();
         debug(`${process.pid} start syncing`);
     }
 

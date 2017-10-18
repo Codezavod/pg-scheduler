@@ -19,6 +19,11 @@ class Models {
         this.Lock.belongsTo(this.Task);
     }
 
+    sync() {
+        return this.Task.sync()
+            .then(() => this.Lock.sync());
+    }
+
     lockModel() {
         return this.sequelize.define('Lock', {
             workerName: {
@@ -32,7 +37,7 @@ class Models {
     }
 
     taskModel() {
-        return this.sequelize.define('Task', {
+        const Task = this.sequelize.define('Task', {
             name: {
                 type: Sequelize.STRING,
                 allowNull: false,
@@ -75,43 +80,46 @@ class Models {
             runAtTime: {
                 type: Sequelize.TIME,
             },
-        }, {
-            instanceMethods: {
-                // bad, bad hack :(
-                checkEmitter: function() {
-                    if (!this.emitter) {
-                        this.emitter = new EventEmitter();
-                    }
-                },
-                on: function(...args) {
-                    this.checkEmitter();
-                    this.emitter.on(...args);
-                },
-                removeListener: function(...args) {
-                    this.checkEmitter();
-                    this.emitter.removeListener(...args);
-                },
-                emit: function(...args) {
-                    this.checkEmitter();
-                    this.emitter.emit(...args);
-                },
-                touch: function() {
-                    debug(`${process.pid} '.touch()' called for task ${this.name} (${this.id})`);
-                    this.emit('touch');
-
-                    return this.getLocks().then((foundLocks) => {
-                        debug(`${process.pid} '.touch()' found ${foundLocks.length} locks for task ${this.name} (${this.id})`);
-
-                        return Promise.resolve(foundLocks).map((Lock) => {
-                            Lock.updatedAt = new Date();
-                            Lock.changed('updatedAt', true);
-
-                            return Lock.save();
-                        });
-                    });
-                },
-            },
         });
+
+        Task.prototype.checkEmitter = function() {
+            if (!this.emitter) {
+                this.emitter = new EventEmitter();
+            }
+        };
+
+        Task.prototype.on = function(...args) {
+            this.checkEmitter();
+            this.emitter.on(...args);
+        };
+
+        Task.prototype.removeListener = function(...args) {
+            this.checkEmitter();
+            this.emitter.removeListener(...args);
+        };
+
+        Task.prototype.emit = function(...args) {
+            this.checkEmitter();
+            this.emitter.emit(...args);
+        };
+
+        Task.prototype.touch = function() {
+            debug(`${process.pid} '.touch()' called for task ${this.name} (${this.id})`);
+            this.emit('touch');
+
+            return this.getLocks().then((foundLocks) => {
+                debug(`${process.pid} '.touch()' found ${foundLocks.length} locks for task ${this.name} (${this.id})`);
+
+                return Promise.resolve(foundLocks).map((Lock) => {
+                    Lock.updatedAt = new Date();
+                    Lock.changed('updatedAt', true);
+
+                    return Lock.save();
+                });
+            });
+        };
+
+        return Task;
     }
 }
 
