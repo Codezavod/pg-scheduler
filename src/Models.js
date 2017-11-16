@@ -33,7 +33,7 @@ class Models {
                     notEmpty: true,
                 },
             },
-        });
+        }, {timestamps: true});
     }
 
     taskModel() {
@@ -80,7 +80,11 @@ class Models {
             runAtTime: {
                 type: Sequelize.TIME,
             },
-        });
+            repeatOnError: {
+                type: Sequelize.BOOLEAN,
+                defaultValue: false,
+            },
+        }, {timestamps: true});
 
         Task.prototype.checkEmitter = function() {
             if (!this.emitter) {

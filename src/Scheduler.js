@@ -119,7 +119,7 @@ class Scheduler extends EventEmitter {
     once(date, taskName, data = {}, options = {}) {
         // TODO: human-readable format
         let nextRunAt = new Date(date),
-            {startAt, endAt, concurrency, priority, timeout, now} = options;
+            {startAt, endAt, concurrency, priority, timeout, now, repeatOnError} = options;
 
         if (now) {
             nextRunAt = new Date();
@@ -133,7 +133,8 @@ class Scheduler extends EventEmitter {
             endAt,
             concurrency,
             priority,
-            timeout
+            timeout,
+            repeatOnError,
         });
     }
 
@@ -187,13 +188,17 @@ class Scheduler extends EventEmitter {
                     endAt: {$or: {$gte: currDate, $eq: null}},
                     name: {$in: Object.keys(this.processorsStorage.processors)}
                 },
-                where = _.defaultsDeep({}, this.options.pollingWhereClause, defaultWhere);
+                where = _.defaultsDeep({}, this.options.pollingWhereClause, defaultWhere),
+                findOptions = {
+                    where,
+                    include: [ this.models.Lock ],
+                };
 
-            this.models.Task.findAll({
-                where: where,
-                // order: [['priority', 'ASC']], // order will be in queue anyway
-                include: [ this.models.Lock ]
-            }).then((foundTasks) => {
+            if (this.options.maxConcurrency) {
+                findOptions.limit = this.options.maxConcurrency;
+            }
+
+            this.models.Task.findAll(findOptions).then((foundTasks) => {
                 if (this.stopping) {
                     return;
                 }
@@ -224,7 +229,7 @@ class Scheduler extends EventEmitter {
 
             const currDate = new Date();
 
-            this.models.Lock.findAll({ include: [ {model: this.models.Task, fields: ['id', 'name', 'timeout']} ] }).then((foundLocks) => {
+            this.models.Lock.findAll({ include: [ {model: this.models.Task, attributes: ['id', 'name', 'timeout']} ] }).then((foundLocks) => {
                 return Promise.resolve(foundLocks).each((lock) => {
                     if (!lock.Task || this.stopping) {
                         return Promise.resolve();
@@ -361,14 +366,14 @@ class Scheduler extends EventEmitter {
             task.failsCount = 0;
         }
 
-        if (!task.interval && !task.runAtTime) {
+        if (!task.interval && !task.runAtTime && (!task.repeatOnError || (task.repeatOnError && task.failsCount === 0))) {
             // remove task created with `.once()`. lock will be removed with CASCADE
             return task.destroy().then(() => {
                 this.emit(`task-${task.name}-complete`);
             }).catch(this.errorHandler.bind(this));
         }
 
-        task.nextRunAt = RunAt.calcNextRunAt(task.interval, task.runAtTime);
+        task.nextRunAt = RunAt.calcNextRunAt(task.interval, task.runAtTime, task);
 
         task.save().then(() => {
             debug(`${process.pid} task saved. removing lock`);

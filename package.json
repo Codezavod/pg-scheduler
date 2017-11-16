@@ -1,6 +1,6 @@
 {
   "name": "pg-scheduler",
-  "version": "3.0.0-beta7",
+  "version": "3.0.0-beta8",
   "scripts": {
     "test": "NODE_ENV=testing mocha",
     "coverage": "babel-node $(which babel-istanbul) cover node_modules/mocha/bin/_mocha -- --reporter dot",
@@ -28,7 +28,6 @@
     "node": ">=6.0.0"
   },
   "files": [
-    "src/",
     "dst/",
     "index.d.ts"
   ],

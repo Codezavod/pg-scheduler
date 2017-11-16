@@ -1,6 +1,6 @@
 
 class RunAt {
-    static calcNextRunAt(interval, runAtTime) {
+    static calcNextRunAt(interval, runAtTime, task = null) {
         let now = new Date();
 
         if (interval && !runAtTime) {
@@ -12,6 +12,8 @@ class RunAt {
             nextDate.setHours(~~timeArr[0], ~~timeArr[1], ~~timeArr[2]);
 
             return nextDate;
+        } else if (task && task.repeatOnError) {
+            return new Date(now.getTime() + (1000 * 10 * task.failsCount));
         } else {
             throw new Error('Not implemented. use or only `interval` or only `runAtTime`');
         }

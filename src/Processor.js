@@ -29,16 +29,21 @@ class Processor {
             touchHandler = () => {
                 clearTimeout(timeout);
                 timeout = setTimeout(timeoutHandler, task.timeout);
-            };
+            },
+            doneHandler = _.once((err) => {
+                this.unlock();
+                clearTimeout(timeout);
+                task.removeListener('touch', touchHandler);
+                done(err);
+            });
 
         task.on('touch', touchHandler);
 
-        this.processorFunc(_.cloneDeep(task), (err) => {
-            this.unlock();
-            clearTimeout(timeout);
-            task.removeListener('touch', touchHandler);
-            done(err);
-        });
+        const processResult = this.processorFunc(_.cloneDeep(task), doneHandler);
+
+        if (processResult && processResult.catch) {
+            processResult.catch(doneHandler);
+        }
     }
 
     lock() {

@@ -26,7 +26,7 @@ declare namespace Scheduler {
         workerName?: string,
         pollingWhereClause?: any,
         maxConcurrency?: number, // concurrency for current instance for ALL tasks
-        client: Sequelize;
+        client?: Sequelize;
     }
 
     interface Scheduler {
@@ -67,6 +67,7 @@ declare namespace Scheduler {
         priority?: number;
         timeout?: number;
         now?: boolean;
+        repeatOnError?: boolean;
     }
 
     interface TaskInstance extends Instance<TaskAttribute> {
@@ -90,6 +91,7 @@ declare namespace Scheduler {
         timeout?: number;
         failsCount?: number;
         runAtTime?: string;
+        repeatOnError?: boolean;
         Locks?: Lock[];
     }
 
