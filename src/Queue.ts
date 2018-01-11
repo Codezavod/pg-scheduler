@@ -58,4 +58,8 @@ export class Queue extends EventEmitter {
 
         return this.queue.shift();
     }
+
+    public getTasksIds() {
+        return this.queue.map(t => t.id);
+    }
 }

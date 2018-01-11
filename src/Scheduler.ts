@@ -259,6 +259,16 @@ export class Scheduler {
                 startAt: {$or: {$lte: currDate, $eq: null}},
                 endAt: {$or: {$gte: currDate, $eq: null}},
                 name: {$in: Object.keys(this.processorsStorage.processors)},
+                id: {
+                    $and: [
+                        {
+                            $notIn: this.sequelize.literal('(SELECT "TaskId" FROM "Locks")'),
+                        },
+                        {
+                            $notIn: this.queue.getTasksIds(),
+                        },
+                    ],
+                },
             },
             where = defaultsDeep({}, this.options.pollingWhereClause, defaultWhere),
             findOptions: FindOptions = {
