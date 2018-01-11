@@ -1,17 +1,21 @@
 
 const gulp = require('gulp'),
-    babel = require('gulp-babel');
+    typescript = require('gulp-typescript'),
+    merge = require('merge2'),
+    tsProject = typescript.createProject('tsconfig.json');
 
-gulp.task('babel', function() {
-    return gulp.src(['src/**/*.js'])
-        .pipe(babel())
-        .pipe(gulp.dest('dst'))
-        .on('error', console.error);
+gulp.task('compile', () => {
+    const tsResult = gulp.src(['src/**/*.ts'])
+        .pipe(tsProject());
+
+    return merge([
+        tsResult.dts.pipe(gulp.dest('dst')),
+        tsResult.js.pipe(gulp.dest('dst')),
+    ]);
 });
 
-gulp.task('watch', function() {
-    gulp.watch('src/**/*.js', ['babel']);
+gulp.task('watch', () => {
+    return gulp.watch('src/**/*.ts', gulp.series('compile'));
 });
 
-gulp.task('default', ['babel', 'watch']);
-gulp.task('build', ['babel']);
+gulp.task('default', gulp.series('compile', 'watch'));

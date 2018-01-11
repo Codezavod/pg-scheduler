@@ -1,21 +1,30 @@
 
-const sinon = require('sinon'),
-    Scheduler = require('../src/Scheduler');
+import 'should';
+import * as sinon from 'sinon';
+import {noop} from 'lodash';
+
+import {Scheduler} from '../src/Scheduler';
 
 function defer() {
-    let resolve,
-        reject,
-        promise = new Promise(function() {
-            resolve = arguments[0];
-            reject = arguments[1];
-        });
+    let resolve: (value?: any) => void = noop,
+        reject: (reason?: any) => void = noop;
+    const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+    });
 
     return {
-        resolve: resolve,
-        reject: reject,
-        promise: promise
+        resolve,
+        reject,
+        promise,
     };
 }
+
+const logFunction = (str: string) => {
+    console.error(str);
+};
+
+process.on('unhandledRejection', e => { throw e; });
 
 describe('Scheduler', () => {
     it('should export function', () => {
@@ -24,13 +33,14 @@ describe('Scheduler', () => {
 });
 
 describe('Instance', () => {
-    let instance,
-        startPromise;
+    let instance: Scheduler,
+        startPromise: Promise<void>;
 
-    before(() => {
-        instance = new Scheduler();
+    before(async () => {
+        instance = new Scheduler({db: {options: {logging: logFunction}}});
 
-        return instance.syncing;
+        await instance.syncing;
+        await instance.models.sync({force: true});
     });
 
     after(() => {
@@ -65,17 +75,16 @@ describe('Instance', () => {
 });
 
 describe('Processing', () => {
-    let instance;
+    let instance: Scheduler;
 
     before(() => {
-        instance = new Scheduler({pollingInterval: 500});
+        instance = new Scheduler({pollingInterval: 500, db: {options: {logging: logFunction}}});
         return instance.syncing;
     });
 
-    after(() => {
-        return instance.models.Task.destroy({where: {$or: [{name: 'task'}, {name: 'task4'}, {name: 'task5'}]}}).then(() => {
-            instance.stop();
-        });
+    after(async () => {
+        await instance.models.Task.destroy({where: {$or: [{name: 'task'}, {name: 'task4'}, {name: 'task5'}]}});
+        instance.stop();
     });
 
     it('should start', () => {
@@ -84,12 +93,16 @@ describe('Processing', () => {
 
     it('should create new Task', () => {
         return instance.once(new Date(), 'task', {
-            qwe: 'asd'
+            qwe: 'asd',
         });
     });
 
     it('should add new processor', (done) => {
-        instance.on('task-task-complete', done);
+        instance.options.taskCompleteHandler = (task) => {
+            if (task.name === 'task') {
+                done();
+            }
+        };
 
         instance.process('task', (task, cb) => {
             task.should.have.properties(['data', 'name']);
@@ -116,7 +129,7 @@ describe('Processing', () => {
         }).catch(done);
 
         instance.every(100, 'task2', {
-            qwe: 'asd'
+            qwe: 'asd',
         });
     });
 
@@ -143,12 +156,12 @@ describe('Processing', () => {
         }, 2500);
 
         instance.every(100, 'task3', {
-            qwe: 'asd'
+            qwe: 'asd',
         }, {concurrency: 1});
     });
 
     it('should throw on invalid `runAtTime` format', () => {
-        (function() {
+        (() => {
             instance.everyDayAt('2016-07-05', 'task4', {qwe: 'asd'});
         }).should.throw('`runAtTime` should be in format: "HH:mm" or "HH:mm:ss"');
     });
@@ -168,6 +181,42 @@ describe('Processing', () => {
         return instance.every((1000 * 60 * 5), 'task5', {qwe: 'asd'}).then((createdTask) => {
             createdTask.nextRunAt.getTime().should.be.equal(new Date('2016-07-05 22:07:50').getTime());
             clock.restore();
+        });
+    });
+});
+
+describe('Advanced concurrency', () => {
+    let instance: Scheduler;
+
+    before(async () => {
+        instance = new Scheduler({pollingInterval: 500, db: {options: {logging: logFunction}}});
+        await instance.syncing;
+        await instance.start();
+    });
+
+    after(async () => {
+        await instance.models.Task.destroy({where: {$or: [{name: 'task10'}]}});
+        await instance.waitUntilAllEnd();
+        await instance.stop();
+    });
+
+    it('should reuse processor function', (done) => {
+        let timesProcessed = 0;
+
+        instance.process('task10', (task, cb) => {
+            timesProcessed++;
+            task.should.have.properties(['data', 'name']);
+
+            cb();
+        }, {concurrency: 5});
+
+        instance.every(100, 'task10', {
+            qwe: 'asd',
+        }, {concurrency: 5, timeout: 1500, now: true}).then(() => {
+            setTimeout(() => {
+                timesProcessed.should.be.equal(2);
+                done();
+            }, 1450);
         });
     });
 });
