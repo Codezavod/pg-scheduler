@@ -262,6 +262,7 @@ export class Scheduler {
         if (this.queue.length + this.noProcessors.length > this.options.maxQueueCapacity) {
             debug(`${process.pid} maxQueueCapacity overflow: ${
                 this.queue.length} + ${this.noProcessors.length} > ${this.options.maxQueueCapacity}`);
+            this.queue.emit('added');
             this.pollingRepeat();
             return;
         }
