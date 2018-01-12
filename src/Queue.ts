@@ -62,4 +62,8 @@ export class Queue extends EventEmitter {
     public getTasksIds() {
         return this.queue.map(t => t.id);
     }
+
+    get length(): number {
+        return this.queue.length;
+    }
 }

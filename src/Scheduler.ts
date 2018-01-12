@@ -27,6 +27,7 @@ const debug = debugLog('pg-scheduler'),
         workerName: process.pid,
         pollingWhereClause: {},
         maxConcurrency: 20, // concurrency for current instance for ALL tasks
+        maxQueueCapacity: 50,
     };
 // how about concurrency per worker?
 
@@ -53,6 +54,7 @@ export interface InputSchedulerOptions {
     client?: SequelizeType;
     taskCompleteHandler: (task: TaskInstance) => void;
     errorHandler: (err: Error) => void;
+    maxQueueCapacity: number;
 }
 
 export interface TaskOptions {
@@ -252,6 +254,17 @@ export class Scheduler {
     private async pollingFunction() {
         // prevent concurrency queries
         clearTimeout(this.pollingTimeout);
+
+        if (this.stopping) {
+            return;
+        }
+
+        if (this.queue.length + this.noProcessors.length > this.options.maxQueueCapacity) {
+            debug(`${process.pid} maxQueueCapacity overflow: ${
+                this.queue.length} + ${this.noProcessors.length} > ${this.options.maxQueueCapacity}`);
+            this.pollingRepeat();
+            return;
+        }
 
         const currDate = new Date(),
             defaultWhere = {
@@ -470,6 +483,7 @@ export class Scheduler {
 
         if (err) {
             console.error('processor completes with error', err);
+            // TODO: make optional saving error to "TasksErrors" table
             task.failsCount++;
         } else {
             task.failsCount = 0;
