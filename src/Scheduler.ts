@@ -1,5 +1,5 @@
 
-import Sequelize, {FindOptions, Options, Sequelize as SequelizeType} from 'sequelize';
+import Sequelize, {FindOptions, Options, Sequelize as SequelizeType, Transaction} from 'sequelize';
 import {defaultsDeep, debounce, chain} from 'lodash';
 import * as debugLog from 'debug';
 import * as Bluebird from 'bluebird';
@@ -65,6 +65,7 @@ export interface TaskOptions {
     timeout?: number;
     now?: boolean;
     repeatOnError?: boolean;
+    transaction?: Transaction;
 }
 
 export class Scheduler {
@@ -132,7 +133,7 @@ export class Scheduler {
     ): Bluebird<TaskInstance> {
         // TODO: human-readable format
         let nextRunAt = RunAt.calcNextRunAt(interval);
-        const {startAt, endAt, concurrency, priority, timeout, now} = options;
+        const {startAt, endAt, concurrency, priority, timeout, now, transaction} = options;
 
         if (now) {
             nextRunAt = new Date();
@@ -148,7 +149,7 @@ export class Scheduler {
             concurrency,
             priority,
             timeout,
-        } as any);
+        } as any, {transaction});
     }
 
     public everyDayAt(
@@ -160,7 +161,7 @@ export class Scheduler {
         RunAt.assertRunAtTime(runAtTime);
 
         let nextRunAt = RunAt.calcNextRunAt(null, runAtTime);
-        const {startAt, endAt, concurrency, priority, timeout, now} = options;
+        const {startAt, endAt, concurrency, priority, timeout, now, transaction} = options;
 
         if (now) {
             nextRunAt = new Date();
@@ -176,7 +177,7 @@ export class Scheduler {
             concurrency,
             priority,
             timeout,
-        } as any);
+        } as any, {transaction});
     }
 
     public once(
@@ -187,7 +188,7 @@ export class Scheduler {
     ): Bluebird<TaskInstance> {
         // TODO: human-readable format
         let nextRunAt = new Date(date instanceof Date ? date.getTime() : date);
-        const {startAt, endAt, concurrency, priority, timeout, now, repeatOnError} = options;
+        const {startAt, endAt, concurrency, priority, timeout, now, repeatOnError, transaction} = options;
 
         if (now) {
             nextRunAt = new Date();
@@ -203,7 +204,7 @@ export class Scheduler {
             priority,
             timeout,
             repeatOnError,
-        } as any);
+        } as any, {transaction});
     }
 
     get totalProcessedCount() {
