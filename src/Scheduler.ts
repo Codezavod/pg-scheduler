@@ -1,5 +1,7 @@
 
-import Sequelize, {FindOptions, Options, Sequelize as SequelizeType, Transaction} from 'sequelize';
+import Sequelize, {
+    DatabaseError, FindOptions, ForeignKeyConstraintError, Options, Sequelize as SequelizeType, Transaction,
+} from 'sequelize';
 import {defaultsDeep, debounce, chain} from 'lodash';
 import * as debugLog from 'debug';
 import * as Bluebird from 'bluebird';
@@ -364,6 +366,11 @@ export class Scheduler {
         this.locksPollingRepeat();
     }
 
+    private delayTaskHandling(task: TaskInstance) {
+        this.noProcessors.push(task);
+        this.recursiveQueueAddHandler(this.queue.shift());
+    }
+
     private async recursiveQueueAddHandler(task?: TaskInstance) {
         if (this.stopping || !task) {
             return;
@@ -376,9 +383,7 @@ export class Scheduler {
             debug(
                 `${process.pid} maxConcurrency (${this.options.maxConcurrency}) limit reached (${workerRunningCount})`,
             );
-            this.noProcessors.push(task);
-            this.recursiveQueueAddHandler(this.queue.shift());
-
+            this.delayTaskHandling(task);
             return;
         }
 
@@ -388,9 +393,7 @@ export class Scheduler {
 
         if (taskRunningCount >= task.concurrency) {
             debug(`${process.pid} task concurrency limit reached (max: ${task.concurrency})`);
-            this.noProcessors.push(task);
-            this.recursiveQueueAddHandler(this.queue.shift());
-
+            this.delayTaskHandling(task);
             return;
         }
 
@@ -398,9 +401,7 @@ export class Scheduler {
         // skip if no free processors found
         if (!processor) {
             debug(`${process.pid} no processors for task "${task.name} (${task.id})"`);
-            this.noProcessors.push(task);
-            this.recursiveQueueAddHandler(this.queue.shift());
-
+            this.delayTaskHandling(task);
             return;
         }
 
@@ -432,7 +433,23 @@ export class Scheduler {
                 return;
             }
 
-            const createdLock = await task.createLock({workerName: this.options.workerName} as any, {transaction: t});
+            let createdLock: LockInstance;
+            try {
+                createdLock = await task.createLock({workerName: this.options.workerName} as any, {transaction: t});
+            } catch (err) {
+                if (err instanceof ForeignKeyConstraintError) {
+                    // remove task from queue and go to next
+                    await t.rollback();
+                    this.recursiveQueueAddHandler(this.queue.shift());
+                    return;
+                } else if (err instanceof DatabaseError && err.message.indexOf('could not serialize access') !== -1) {
+                    // re-queue task and go to next
+                    this.delayTaskHandling(task);
+                    return;
+                }
+
+                throw err;
+            }
 
             if (processor.isLocked) {
                 debug(`${process.pid} processor already locked`);
@@ -451,8 +468,6 @@ export class Scheduler {
 
             debug(`${process.pid} lock ${createdLock.id} created for task ${task.name} (${task.id}). start processor`);
 
-            await t.commit();
-
             try {
                 processor.start(task, (err) => {
                     this.taskCompleteHandler(err, task, createdLock);
@@ -462,7 +477,10 @@ export class Scheduler {
             }
 
             this.recursiveQueueAddHandler(this.queue.shift());
+
+            await t.commit();
         } catch (err) {
+            console.error(`${process.pid} recursiveQueueAddHandler: caught error`, err);
             await t.rollback();
             this.errorHandler(err);
         }
