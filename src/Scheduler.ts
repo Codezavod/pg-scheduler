@@ -291,6 +291,7 @@ export class Scheduler {
             findOptions: FindOptions = {
                 where,
                 include: [ this.models.Lock ],
+                order: [['priority', 'ASC']],
             };
 
         if (this.options.maxConcurrency) {
