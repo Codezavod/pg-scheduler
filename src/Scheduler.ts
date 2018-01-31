@@ -377,6 +377,7 @@ export class Scheduler {
             return;
         }
 
+        // FIXME: sometimes `taskRunningCount` has negative value
         const taskRunningCount = this.processorsStorage.runningCount(task.name),
             workerRunningCount = this.processorsStorage.runningCount();
 
@@ -503,7 +504,7 @@ export class Scheduler {
         this.processedCount[task.id]++;
 
         if (err) {
-            console.error('processor completes with error', err);
+            console.error('processor completes with error', err.stack);
             // TODO: make optional saving error to "TasksErrors" table
             task.failsCount++;
         } else {
