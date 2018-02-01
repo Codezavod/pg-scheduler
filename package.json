@@ -1,6 +1,6 @@
 {
   "name": "pg-scheduler",
-  "version": "4.0.0-beta8",
+  "version": "4.0.0-beta9",
   "scripts": {
     "test": "NODE_ENV=testing mocha test/**/*.ts",
     "coverage": "NODE_ENV=testing nyc mocha",

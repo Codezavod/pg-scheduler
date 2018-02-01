@@ -446,6 +446,7 @@ export class Scheduler {
                     return;
                 } else if (err instanceof DatabaseError && err.message.indexOf('could not serialize access') !== -1) {
                     // re-queue task and go to next
+                    await t.rollback();
                     this.delayTaskHandling(task);
                     return;
                 }
@@ -504,7 +505,7 @@ export class Scheduler {
         this.processedCount[task.id]++;
 
         if (err) {
-            console.error('processor completes with error', err.stack);
+            console.error('processor completes with error', err.stack || err);
             // TODO: make optional saving error to "TasksErrors" table
             task.failsCount++;
         } else {
