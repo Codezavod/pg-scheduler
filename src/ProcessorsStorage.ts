@@ -31,7 +31,7 @@ export class ProcessorsStorage {
         const taskName = task.name,
             processor: ProcessorsItem | void = this.processors[taskName];
 
-        if (!processor || !processor.processors || !processor.processors.length) {
+        if (!processor || !processor.active || !processor.processors || !processor.processors.length) {
             debug(`no processors for task ${taskName} found`);
 
             return null;

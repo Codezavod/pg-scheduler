@@ -2,7 +2,7 @@
 import * as EventEmitter from 'events';
 import {
     BelongsToGetAssociationMixin, HasManyCountAssociationsMixin, HasManyCreateAssociationMixin,
-    HasManyGetAssociationsMixin, Instance, Model, Sequelize, SyncOptions,
+    HasManyGetAssociationsMixin, Instance, Model, QueryTypes, Sequelize, SyncOptions,
 } from 'sequelize';
 import * as debugLog from 'debug';
 
@@ -169,16 +169,12 @@ export class Models {
             debug(`${process.pid} '.touch()' called for task ${this.name} (${this.id})`);
             this.emit('touch');
 
-            const foundLocks = await this.getLocks();
-
-            debug(`${process.pid} '.touch()' found ${foundLocks.length} locks for task ${this.name} (${this.id})`);
-
-            await Promise.all(foundLocks.map((Lock) => {
-                Lock.updatedAt = new Date();
-                Lock.changed('updatedAt');
-
-                return Lock.save();
-            }));
+            await this.sequelize.query(`UPDATE "Locks" SET "updatedAt" = NOW() WHERE "TaskId" = :task_id`, {
+                replacements: {
+                    task_id: this.id,
+                },
+                type: QueryTypes.UPDATE,
+            });
         };
 
         return Task;
